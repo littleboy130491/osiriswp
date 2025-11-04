@@ -63,4 +63,3 @@ function osiriswp_run() {
 	$plugin->run();
 }
 add_action( 'plugins_loaded', 'osiriswp_run' );
-

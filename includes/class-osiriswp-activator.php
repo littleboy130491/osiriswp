@@ -9,7 +9,6 @@ class OsirisWP_Activator {
 			add_option( 'osiriswp_option_name', 'Hello from OsirisWP' );
 		}
 	}
-
 	private static function create_database_table() {
 		global $wpdb;
 		
