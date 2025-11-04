@@ -1,9 +1,9 @@
-﻿<?php
+<?php
 /**
- * Plugin Name:       OsirisWP
+ * Plugin Name:       OsirisWP Event Tracking
  * Plugin URI:        https://example.com/osiriswp
- * Description:       Starter plugin scaffold for custom enhancements.
- * Version:           0.1.0
+ * Description:       Track all events triggered in your WordPress site with visitor UUID management and comprehensive analytics dashboard.
+ * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            You

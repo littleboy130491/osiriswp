@@ -1,1 +1,3 @@
-﻿(function($){\n\t// Admin JS placeholder\n})(jQuery);
+(function($){
+	// Admin JS placeholder
+})(jQuery);
