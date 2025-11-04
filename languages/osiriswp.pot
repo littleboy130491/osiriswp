@@ -1,0 +1,29 @@
+﻿msgid ""
+msgstr ""
+"Project-Id-Version: OsirisWP 0.1.0\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Language-Team: \n"
+"X-Generator: osiriswp\n"
+
+#: admin/class-osiriswp-admin.php
+msgid "OsirisWP Settings"
+msgstr ""
+
+#: admin/class-osiriswp-admin.php
+msgid "Main Settings"
+msgstr ""
+
+#: admin/class-osiriswp-admin.php
+msgid "Configure OsirisWP behavior."
+msgstr ""
+
+#: admin/class-osiriswp-admin.php
+msgid "Greeting Text"
+msgstr ""
+
+#: includes/class-osiriswp.php
+msgid "Hello %1$s! %2$s"
+msgstr ""
