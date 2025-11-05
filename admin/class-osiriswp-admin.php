@@ -776,30 +776,6 @@ class OsirisWP_Admin {
 		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
 		$sql .= " {$where_clause}";
 		
-		if ( ! empty( $visitor_uuid ) ) {
-			$where[] = $wpdb->prepare( "visitor_uuid = %s", $visitor_uuid );
-		}
-		
-		if ( ! empty( $page ) ) {
-			$where[] = $wpdb->prepare( "page = %s", $page );
-		}
-		
-		if ( ! empty( $date_from ) ) {
-			$where[] = $wpdb->prepare( "DATE(triggered_at) >= %s", $date_from );
-		}
-		
-		if ( ! empty( $date_to ) ) {
-			$where[] = $wpdb->prepare( "DATE(triggered_at) <= %s", $date_to );
-		}
-		
-		if ( ! empty( $cookie_name ) ) {
-			$where[] = $wpdb->prepare( "cookies LIKE %s", '%' . $wpdb->esc_like( $cookie_name ) . '%' );
-		}
-		
-		if ( ! empty( $where ) ) {
-			$sql .= " WHERE " . implode( " AND ", $where );
-		}
-		
 		return (int) $wpdb->get_var( $sql );
 	}
 
