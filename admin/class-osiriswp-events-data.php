@@ -11,33 +11,9 @@ class OsirisWP_Events_Data {
 
 	public function get_events( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '', $page_num = 1, $per_page = 50 ) {
 		global $wpdb;
-		
-		$where = [];
+
+		$where = $this->build_where_conditions( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
 		$sql = "SELECT * FROM {$this->table_name}";
-		
-		if ( ! empty( $visitor_uuid ) ) {
-			$where[] = $wpdb->prepare( 'visitor_uuid = %s', $visitor_uuid );
-		}
-		
-		if ( ! empty( $page ) ) {
-			$where[] = $wpdb->prepare( 'page = %s', $page );
-		}
-		
-		if ( ! empty( $event_name ) ) {
-			$where[] = $wpdb->prepare( 'event_name = %s', $event_name );
-		}
-		
-		if ( ! empty( $date_from ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) >= %s', $date_from );
-		}
-		
-		if ( ! empty( $date_to ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) <= %s', $date_to );
-		}
-		
-		if ( ! empty( $cookie_name ) ) {
-			$where[] = $wpdb->prepare( 'cookies LIKE %s', '%' . $wpdb->esc_like( $cookie_name ) . '%' );
-		}
 		
 		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
 		
@@ -49,33 +25,9 @@ class OsirisWP_Events_Data {
 
 	public function get_events_count( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
 		global $wpdb;
-		
-		$where = [];
+
+		$where = $this->build_where_conditions( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
 		$sql = "SELECT COUNT(*) FROM {$this->table_name}";
-		
-		if ( ! empty( $visitor_uuid ) ) {
-			$where[] = $wpdb->prepare( 'visitor_uuid = %s', $visitor_uuid );
-		}
-		
-		if ( ! empty( $page ) ) {
-			$where[] = $wpdb->prepare( 'page = %s', $page );
-		}
-		
-		if ( ! empty( $event_name ) ) {
-			$where[] = $wpdb->prepare( 'event_name = %s', $event_name );
-		}
-		
-		if ( ! empty( $date_from ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) >= %s', $date_from );
-		}
-		
-		if ( ! empty( $date_to ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) <= %s', $date_to );
-		}
-		
-		if ( ! empty( $cookie_name ) ) {
-			$where[] = $wpdb->prepare( 'cookies LIKE %s', '%' . $wpdb->esc_like( $cookie_name ) . '%' );
-		}
 		
 		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
 		$sql .= " {$where_clause}";
@@ -85,38 +37,24 @@ class OsirisWP_Events_Data {
 
 	public function get_all_events_for_export( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
 		global $wpdb;
-		
-		$where = [];
+
+		$where = $this->build_where_conditions( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
 		$sql = "SELECT * FROM {$this->table_name}";
-		
-		if ( ! empty( $visitor_uuid ) ) {
-			$where[] = $wpdb->prepare( 'visitor_uuid = %s', $visitor_uuid );
-		}
-		
-		if ( ! empty( $page ) ) {
-			$where[] = $wpdb->prepare( 'page = %s', $page );
-		}
-		
-		if ( ! empty( $event_name ) ) {
-			$where[] = $wpdb->prepare( 'event_name = %s', $event_name );
-		}
-		
-		if ( ! empty( $date_from ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) >= %s', $date_from );
-		}
-		
-		if ( ! empty( $date_to ) ) {
-			$where[] = $wpdb->prepare( 'DATE(triggered_at) <= %s', $date_to );
-		}
-		
-		if ( ! empty( $cookie_name ) ) {
-			$where[] = $wpdb->prepare( 'cookies LIKE %s', '%' . $wpdb->esc_like( $cookie_name ) . '%' );
-		}
 		
 		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
 		$sql .= " {$where_clause} ORDER BY triggered_at DESC";
 		
 		return $wpdb->get_results( $sql );
+	}
+
+	public function get_unique_visitors_count( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
+		global $wpdb;
+
+		$where = $this->build_where_conditions( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+		$where_clause = ! empty( $where ) ? 'WHERE ' . implode( ' AND ', $where ) : '';
+		$sql = "SELECT COUNT(DISTINCT visitor_uuid) FROM {$this->table_name} {$where_clause}";
+
+		return (int) $wpdb->get_var( $sql );
 	}
 
 	public function get_unique_pages() {
@@ -127,5 +65,37 @@ class OsirisWP_Events_Data {
 	public function get_unique_event_names() {
 		global $wpdb;
 		return $wpdb->get_col( "SELECT DISTINCT event_name FROM {$this->table_name} ORDER BY event_name ASC" );
+	}
+
+	private function build_where_conditions( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
+		global $wpdb;
+
+		$where = [];
+
+		if ( ! empty( $visitor_uuid ) ) {
+			$where[] = $wpdb->prepare( 'visitor_uuid = %s', $visitor_uuid );
+		}
+
+		if ( ! empty( $page ) ) {
+			$where[] = $wpdb->prepare( 'page = %s', $page );
+		}
+
+		if ( ! empty( $event_name ) ) {
+			$where[] = $wpdb->prepare( 'event_name = %s', $event_name );
+		}
+
+		if ( ! empty( $date_from ) ) {
+			$where[] = $wpdb->prepare( 'DATE(triggered_at) >= %s', $date_from );
+		}
+
+		if ( ! empty( $date_to ) ) {
+			$where[] = $wpdb->prepare( 'DATE(triggered_at) <= %s', $date_to );
+		}
+
+		if ( ! empty( $cookie_name ) ) {
+			$where[] = $wpdb->prepare( 'cookies LIKE %s', '%' . $wpdb->esc_like( $cookie_name ) . '%' );
+		}
+
+		return $where;
 	}
 }
