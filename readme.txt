@@ -3,7 +3,7 @@ Contributors: Henry
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,7 +18,7 @@ OsirisWP Event Tracker is a comprehensive solution for tracking user interaction
 - **Query String & Cookie Capture**: Automatically captures URL parameters and cookies
 - **Custom Event Support**: Track custom events with flexible data payloads
 - **Admin Dashboard**: View and filter events with a clean, intuitive interface
-- **Summary Metrics**: Filter-aware Visitors, Events Triggered, and Rate (events/visitors)
+- **Summary Metrics**: Filter-aware Visitors (unique `page_view` users), Events Triggered, and Rate (events/visitors)
 - **Configurable Event Count Mode**: Count events per trigger or once per visitor
 - **CSV Export**: Export filtered events directly from the events screen
 - **Responsive Design**: Works on all device sizes
@@ -110,6 +110,10 @@ By default, your event data is preserved. If you want to clean up the database o
 3. Event type breakdown chart
 
 == Changelog ==
+
+= 1.0.4 =
+* Updated Visitors summary metric to use unique visitors from `page_view` events (counted once per visitor).
+* Kept Events Triggered mode behavior (once per visitor or each trigger) for event metrics and rate calculation.
 
 = 1.0.3 =
 * Added filter-aware summary cards above the events table (Visitors, Events Triggered, Rate).
