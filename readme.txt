@@ -3,7 +3,7 @@ Contributors: Henry
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -110,10 +110,6 @@ By default, your event data is preserved. If you want to clean up the database o
 3. Event type breakdown chart
 
 == Changelog ==
-
-= 1.0.4 =
-* Updated Visitors summary metric to use unique visitors from `page_view` events (counted once per visitor).
-* Kept Events Triggered mode behavior (once per visitor or each trigger) for event metrics and rate calculation.
 
 = 1.0.3 =
 * Added filter-aware summary cards above the events table (Visitors, Events Triggered, Rate).

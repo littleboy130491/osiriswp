@@ -24,9 +24,8 @@ class OsirisWP_Events_Renderer {
 		
 		$events = $this->data_handler->get_events( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $page_num, $per_page );
 		$total_events = $this->data_handler->get_events_count( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-		$total_visitors = $this->data_handler->get_unique_visitors_count( $visitor_uuid, $page, 'page_view', $date_from, $date_to, $cookie_name );
-		$event_unique_visitors = $this->data_handler->get_unique_visitors_count( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-		$event_triggered = 'once' === $event_count_mode ? $event_unique_visitors : $total_events;
+		$total_visitors = $this->data_handler->get_unique_visitors_count( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+		$event_triggered = 'once' === $event_count_mode ? $total_visitors : $total_events;
 		$event_rate = $total_visitors > 0 ? $event_triggered / $total_visitors : 0;
 		$total_pages = ceil( $total_events / $per_page );
 		
@@ -117,7 +116,7 @@ class OsirisWP_Events_Renderer {
 		?>
 		<div class="osiriswp-summary">
 			<div class="osiriswp-summary-card">
-				<h3><?php echo esc_html__( 'Visitors (from page_view)', 'osiriswp' ); ?></h3>
+				<h3><?php echo esc_html__( 'Visitors', 'osiriswp' ); ?></h3>
 				<p><?php echo esc_html( number_format_i18n( $total_visitors ) ); ?></p>
 			</div>
 			<div class="osiriswp-summary-card">
