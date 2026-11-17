@@ -6,7 +6,6 @@ class OsirisWP_Settings {
 	public function hooks() {
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
 		add_action( 'wp_ajax_osiriswp_prune_data', [ $this, 'ajax_prune_data' ] );
-		add_action( 'wp_ajax_nopriv_osiriswp_prune_data', [ $this, 'ajax_prune_data' ] );
 	}
 
 	public function register_settings() {
@@ -18,13 +17,13 @@ class OsirisWP_Settings {
 
 		register_setting( 'osiriswp_settings', 'osiriswp_prune_days', [
 			'type' => 'integer',
-			'sanitize_callback' => 'absint',
+			'sanitize_callback' => [ $this, 'sanitize_prune_days' ],
 			'default' => 30,
 		] );
 
 		register_setting( 'osiriswp_settings', 'osiriswp_tracked_events', [
 			'type' => 'string',
-			'sanitize_callback' => 'sanitize_text_field',
+			'sanitize_callback' => [ $this, 'sanitize_tracked_events' ],
 			'default' => '',
 		] );
 
@@ -53,7 +52,7 @@ class OsirisWP_Settings {
 
 		add_settings_field( 'osiriswp_prune_days', __( 'Data Pruning', 'osiriswp' ), function() {
 			$days = get_option( 'osiriswp_prune_days', 30 );
-			echo '<input type="number" name="osiriswp_prune_days" value="' . esc_attr( $days ) . '" min="0" max="365" class="small-text" /> ' . esc_html__( 'days', 'osiriswp' );
+			echo '<input type="number" name="osiriswp_prune_days" value="' . esc_attr( $days ) . '" min="0" max="3650" class="small-text" /> ' . esc_html__( 'days', 'osiriswp' );
 			echo '<p class="description">' . esc_html__( 'Specify the age threshold for manual data pruning. When you click "Prune Old Data", all records older than this many days will be deleted.', 'osiriswp' ) . '</p>';
 			echo '<p class="notice notice-warning" style="margin: 10px 0; padding: 10px;"><strong>' . esc_html__( 'Notice:', 'osiriswp' ) . '</strong> ' . esc_html__( 'Setting this to 0 will delete ALL event data when you prune.', 'osiriswp' ) . '</p>';
 		}, 'osiriswp_settings', 'osiriswp_main' );
@@ -71,64 +70,68 @@ class OsirisWP_Settings {
 		}, 'osiriswp_settings', 'osiriswp_main' );
 	}
 
+	/**
+	 * Clamp pruning age to 0–3650 days.
+	 */
+	public function sanitize_prune_days( $value ) {
+		return min( 3650, absint( $value ) );
+	}
+
+	/**
+	 * Normalise the additional events list (comma or newline separated) to "a, b, c".
+	 */
+	public function sanitize_tracked_events( $value ) {
+		$events = preg_split( '/[\s,]+/', (string) $value );
+		$events = array_map( [ 'OsirisWP_Public', 'sanitize_event_name' ], (array) $events );
+		$events = array_values( array_unique( array_filter( $events ) ) );
+
+		return implode( ', ', $events );
+	}
+
 	public function ajax_prune_data() {
-		// Remove any BOM or output buffering
-		if (ob_get_length()) ob_clean();
-		
-		// Set clean JSON headers
-		header('Content-Type: application/json; charset=utf-8');
-		
-		// Debug logging
-		error_log('OsirisWP: ajax_prune_data called');
-		
 		check_ajax_referer( 'osiriswp_prune_nonce', 'nonce' );
-		
+
 		if ( ! current_user_can( 'manage_options' ) ) {
-			error_log('OsirisWP: Insufficient permissions');
-			wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'osiriswp' ) ] );
+			wp_send_json_error( [ 'message' => __( 'Insufficient permissions.', 'osiriswp' ) ], 403 );
 		}
-		
-		$days = get_option( 'osiriswp_prune_days', 30 );
-		error_log('OsirisWP: Pruning days retrieved from DB: ' . var_export($days, true));
-		error_log('OsirisWP: All osiriswp options: ' . print_r(get_option('osiriswp_settings'), true));
-		
+
+		$days = absint( get_option( 'osiriswp_prune_days', 30 ) );
+
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'osiriswp_events';
-		
-		if ( $days == 0 ) {
-			// Delete ALL data
-			error_log('OsirisWP: Deleting ALL data');
-			$deleted = $wpdb->query( "DELETE FROM {$table_name}" );
-			if ( $deleted !== false ) {
-				wp_send_json_success( [ 
-					'message' => __( 'ALL event data has been deleted.', 'osiriswp' ) 
-				] );
-			} else {
-				error_log('OsirisWP: Database error deleting all data');
-				wp_send_json_error( [ 'message' => __( 'Database error occurred.', 'osiriswp' ) ] );
+
+		if ( 0 === $days ) {
+			// Delete ALL data.
+			$deleted = $wpdb->query( "TRUNCATE TABLE `{$table_name}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $deleted ) {
+				$deleted = $wpdb->query( "DELETE FROM `{$table_name}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			}
-		} else {
-			// Delete data older than specified days
-			$cutoff_date = date( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
-			error_log('OsirisWP: Deleting data older than: ' . $cutoff_date);
-			
-			$deleted = $wpdb->query( $wpdb->prepare(
-				"DELETE FROM {$table_name} WHERE triggered_at < %s",
-				$cutoff_date
-			) );
-			
-			if ( $deleted !== false ) {
-				wp_send_json_success( [ 
-					'message' => sprintf( 
-						__( '%d records deleted (older than %d days).', 'osiriswp' ), 
-						$deleted,
-						$days
-					) 
-				] );
-			} else {
-				error_log('OsirisWP: Database error deleting old data');
-				wp_send_json_error( [ 'message' => __( 'Database error occurred.', 'osiriswp' ) ] );
+
+			if ( false !== $deleted ) {
+				wp_send_json_success( [ 'message' => __( 'ALL event data has been deleted.', 'osiriswp' ) ] );
 			}
+			wp_send_json_error( [ 'message' => __( 'Database error occurred.', 'osiriswp' ) ], 500 );
 		}
+
+		// triggered_at is stored in site-local time (current_time( 'mysql' )), so compare in the same timezone.
+		$cutoff_date = wp_date( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+
+		$deleted = $wpdb->query( $wpdb->prepare(
+			"DELETE FROM `{$table_name}` WHERE triggered_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$cutoff_date
+		) );
+
+		if ( false === $deleted ) {
+			wp_send_json_error( [ 'message' => __( 'Database error occurred.', 'osiriswp' ) ], 500 );
+		}
+
+		wp_send_json_success( [
+			'message' => sprintf(
+				/* translators: 1: number of deleted records, 2: number of days. */
+				__( '%1$d records deleted (older than %2$d days).', 'osiriswp' ),
+				$deleted,
+				$days
+			),
+		] );
 	}
 }

@@ -3,8 +3,9 @@
  * Plugin Name:       OsirisWP Event Tracking
  * Plugin URI:        https://imajiner.id
  * Description:       Track all events triggered in your WordPress site with visitor UUID management and comprehensive analytics dashboard.
- * Version:           1.0.4
- * Requires at least: 6.0
+ * Version:           1.2.0
+ * Requires at least: 6.3
+ * Tested up to:      7.1
  * Requires PHP:      7.4
  * Author:            Imajiner
  * Author URI:        https://imajiner.id
@@ -20,7 +21,10 @@ if (!defined('ABSPATH')) {
 
 // Plugin constants.
 if (!defined('OSIRISWP_VERSION')) {
-	define('OSIRISWP_VERSION', '1.0.4');
+	define('OSIRISWP_VERSION', '1.2.0');
+}
+if (!defined('OSIRISWP_DB_VERSION')) {
+	define('OSIRISWP_DB_VERSION', '1.2.0');
 }
 if (!defined('OSIRISWP_FILE')) {
 	define('OSIRISWP_FILE', __FILE__);
@@ -47,10 +51,12 @@ require_once OSIRISWP_DIR . 'public/class-osiriswp-public.php';
 
 /**
  * Activation hook.
+ *
+ * @param bool $network_wide Whether the plugin is being network-activated.
  */
-function osiriswp_activate()
+function osiriswp_activate($network_wide = false)
 {
-	OsirisWP_Activator::activate();
+	OsirisWP_Activator::activate($network_wide);
 }
 register_activation_hook(__FILE__, 'osiriswp_activate');
 
@@ -68,6 +74,9 @@ register_deactivation_hook(__FILE__, 'osiriswp_deactivate');
  */
 function osiriswp_run()
 {
+	// Activation hooks do not run on plugin updates, so keep the schema current.
+	OsirisWP_Activator::maybe_upgrade();
+
 	$plugin = new OsirisWP();
 	$plugin->run();
 }

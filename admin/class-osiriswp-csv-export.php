@@ -2,6 +2,9 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class OsirisWP_CSV_Export {
+	const NONCE_ACTION = 'osiriswp_export_csv';
+	const NONCE_FIELD  = '_osiriswp_export_nonce';
+
 	private $data_handler;
 
 	public function __construct() {
@@ -12,69 +15,83 @@ class OsirisWP_CSV_Export {
 		add_action( 'admin_init', [ $this, 'handle_csv_export' ] );
 	}
 
+	/**
+	 * Neutralise spreadsheet formulas (CSV injection) in visitor-controlled values.
+	 */
+	public static function escape_cell( $value ) {
+		$value = (string) $value;
+		if ( '' !== $value && in_array( $value[0], [ '=', '+', '-', '@', "\t", "\r" ], true ) ) {
+			$value = "'" . $value;
+		}
+		return $value;
+	}
+
 	public function handle_csv_export() {
-		// Check if export is requested
-		if ( ! isset( $_GET['page'] ) || $_GET['page'] !== 'osiriswp_events' ) {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- verified below.
+		if ( ! isset( $_GET['page'] ) || 'osiriswp_events' !== $_GET['page'] ) {
 			return;
 		}
-		
-		if ( ! isset( $_GET['export_csv'] ) || $_GET['export_csv'] !== '1' ) {
+
+		if ( ! isset( $_GET['export_csv'] ) || '1' !== $_GET['export_csv'] ) {
 			return;
 		}
-		
+		// phpcs:enable
+
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( __( 'Insufficient permissions.', 'osiriswp' ) );
+			wp_die( esc_html__( 'Insufficient permissions.', 'osiriswp' ), '', [ 'response' => 403 ] );
 		}
-		
-		// Get filter parameters
-		$visitor_uuid = isset( $_GET['visitor_uuid'] ) ? sanitize_text_field( $_GET['visitor_uuid'] ) : '';
-		$page = isset( $_GET['page_url'] ) ? sanitize_text_field( $_GET['page_url'] ) : '';
-		$event_name = isset( $_GET['event_name'] ) ? sanitize_text_field( $_GET['event_name'] ) : '';
-		$date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( $_GET['date_from'] ) : '';
-		$date_to = isset( $_GET['date_to'] ) ? sanitize_text_field( $_GET['date_to'] ) : '';
-		$cookie_name = isset( $_GET['cookie_name'] ) ? sanitize_text_field( $_GET['cookie_name'] ) : '';
-		
-		// Get all events (no pagination)
-		$events = $this->data_handler->get_all_events_for_export( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-		
-		// Set headers for CSV download
-		$filename = 'osiriswp-events-' . date( 'Y-m-d-His' ) . '.csv';
+
+		check_admin_referer( self::NONCE_ACTION, self::NONCE_FIELD );
+
+		$filters = OsirisWP_Events_Data::get_filters_from_request();
+
+		// Large exports: don't time out, and stream without output buffering.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 0 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
+		$filename = 'osiriswp-events-' . wp_date( 'Y-m-d-His' ) . '.csv';
+		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		// Open output stream
-		$output = fopen( 'php://output', 'w' );
-		
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		header( 'X-Content-Type-Options: nosniff' );
+
+		$output = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+
 		// Add BOM for Excel UTF-8 support
-		fprintf( $output, chr(0xEF).chr(0xBB).chr(0xBF) );
-		
-		// Add CSV headers
-		fputcsv( $output, [
-			'ID',
-			'Visitor UUID',
-			'Event Name',
-			'Page URL',
-			'Query Strings',
-			'Cookies',
-			'Triggered At'
-		] );
-		
-		// Add data rows
-		foreach ( $events as $event ) {
-			fputcsv( $output, [
-				$event->id,
-				$event->visitor_uuid,
-				$event->event_name,
-				$event->page,
-				$event->query_strings,
-				$event->cookies,
-				$event->triggered_at
-			] );
-		}
-		
-		fclose( $output );
+		fwrite( $output, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+
+		fputcsv( $output, [ 'ID', 'Visitor UUID', 'Event Name', 'Page URL', 'GCLID', 'Query Strings', 'Cookies', 'Triggered At' ], ',', '"', '\\' );
+
+		$this->data_handler->each_event_batch_for_export(
+			static function ( $rows ) use ( $output ) {
+				foreach ( $rows as $event ) {
+					fputcsv(
+						$output,
+						[
+							$event->id,
+							self::escape_cell( $event->visitor_uuid ),
+							self::escape_cell( $event->event_name ),
+							self::escape_cell( $event->page ),
+							self::escape_cell( $event->gclid ),
+							self::escape_cell( $event->query_strings ),
+							self::escape_cell( $event->cookies ),
+							$event->triggered_at,
+						],
+						',',
+						'"',
+						'\\'
+					);
+				}
+				flush();
+			},
+			$filters
+		);
+
+		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;
 	}
 }

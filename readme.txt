@@ -1,9 +1,9 @@
 === OsirisWP Event Tracker ===
 Contributors: Henry
-Requires at least: 6.0
-Tested up to: 6.6
+Requires at least: 6.3
+Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.4
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,7 @@ OsirisWP Event Tracker is a comprehensive solution for tracking user interaction
 ### Key Features:
 - **Real-time Event Tracking**: Tracks page views, clicks, and form submissions
 - **Visitor Identification**: Unique visitor tracking with UUIDs
+- **Google Ads GCLID Attribution**: Remembers `gclid` (plus `gbraid`, `wbraid` and UTM tags) for 90 days, so every later page view, event and return visit is stored with the original ad click
 - **Query String & Cookie Capture**: Automatically captures URL parameters and cookies
 - **Custom Event Support**: Track custom events with flexible data payloads
 - **Admin Dashboard**: View and filter events with a clean, intuitive interface
@@ -53,7 +54,7 @@ No configuration needed! The plugin automatically tracks:
 Configure event names in the plugin settings and let OsirisWP handle the tracking automatically:
 
 1. Go to **OsirisWP → Settings**
-2. Add event names (one per line) such as:
+2. Add event names (comma or newline separated) such as:
    - `button_click`
    - `form_submit`
    - `video_play`
@@ -63,7 +64,7 @@ Configure event names in the plugin settings and let OsirisWP handle the trackin
 The plugin will automatically track these events when they occur on your site.
 
 #### Method 2: Custom JavaScript Tracking (Advanced)
-Use the `trackEvent()` function in your theme or plugins for custom tracking:
+Use `OsirisWP.trackEvent()` (or the `trackEvent()` shorthand) in your theme or plugins for custom tracking. Only events listed in the settings (or the GA4 defaults) are accepted:
 
 ```javascript
 // Basic custom event
@@ -95,6 +96,11 @@ You have two options:
 ### What's the difference between settings and custom tracking?
 Settings-based tracking automatically captures standard interactions. Custom tracking gives you control over what data to send with each event.
 
+### Is the GCLID kept after the visitor changes page or leaves?
+Yes. When a visitor lands with `?gclid=...`, the click ID is saved in a first-party cookie (`osiriswp_attribution`) for 90 days, matching Google Ads' click window. Every following event — on other pages, or when they come back days later — is stored with that GCLID in its own column. A newer ad click replaces it, and a visit with only UTM tags never erases it. This also works on page-cached sites, because the browser script captures it when PHP does not run.
+
+Use the **GCLID** and **Google Ads Clicks** filters on the Events screen, or the GCLID column in the CSV export (for example, for Google Ads offline conversion imports).
+
 ### Where is the event data stored?
 All events are stored in the `wp_osiriswp_events` table in your WordPress database.
 
@@ -110,6 +116,29 @@ By default, your event data is preserved. If you want to clean up the database o
 3. Event type breakdown chart
 
 == Changelog ==
+
+= 1.2.0 =
+* New: GCLID attribution — `gclid`/`gbraid`/`wbraid` and UTM tags are remembered for 90 days and every event is stored with the visitor's GCLID.
+* New: GCLID column, GCLID filter, "Only events with a GCLID" filter and a "Visitors with GCLID" summary card; GCLID column in CSV export.
+* Change: `page_view` is now recorded by the browser, so it works on page-cached sites (and visitors without JavaScript, mostly bots, are no longer counted).
+* Change: visitor ID is created in the browser when a cached page is served, and visitor/attribution cookies are renewed server-side so Safari keeps them for their full lifetime.
+
+= 1.1.0 =
+* Compatibility: tested up to WordPress 7.1; translations load on `init` (no WP 6.7+ notice); front-end script uses the `defer` loading strategy.
+* Security: authentication/session cookies (e.g. `wordpress_logged_in_*`, `wordpress_sec_*`, session/token cookies) are no longer stored.
+* Security: the public tracking endpoint only accepts configured event names and caps payload sizes.
+* Security: CSV export now requires a nonce and neutralises spreadsheet formulas (CSV injection).
+* Security: removed the unauthenticated `nopriv` prune AJAX hook and an unused legacy admin class.
+* Security: visitor cookie is validated as a UUID, generated with `wp_generate_uuid4()`, and sent with `Secure`/`SameSite=Lax`.
+* Fix: tracking no longer breaks on cached pages after the nonce expires for logged-out visitors.
+* Fix: page URLs are correct on subdirectory installs and query strings keep URL encoding.
+* Fix: pruning now uses the site timezone, matching how events are stored.
+* Fix: clicks on elements inside buttons/links are tracked; links that navigate away use `sendBeacon`.
+* Fix: `trackEvent()` shorthand documented in this readme now exists; events without a `page_url` record the current page.
+* Fix: removed a UTF-8 BOM from `uninstall.php`; uninstall now removes the table and all options (multisite aware).
+* Performance: CSV export streams in batches instead of loading the whole table into memory.
+* Performance: replaced the `*` delegated click handler; date filters use the `triggered_at` index.
+* Schema: index prefix lengths for utf8mb4 compatibility and an automatic DB upgrade routine.
 
 = 1.0.4 =
 * Updated Visitors summary metric to use unique visitors from `page_view` events (counted once per visitor).
