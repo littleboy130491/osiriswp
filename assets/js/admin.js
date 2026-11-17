@@ -49,7 +49,7 @@
 		});
 
 		// Copy to clipboard.
-		$(document).on('click', '.copy-btn', function(e) {
+		$(document).on('click', '.copy-btn, .copy-btn-inline', function(e) {
 			e.preventDefault();
 			e.stopPropagation();
 			var $btn = $(this);

@@ -3,7 +3,7 @@ Contributors: Henry
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,7 @@ OsirisWP Event Tracker is a comprehensive solution for tracking user interaction
 ### Key Features:
 - **Real-time Event Tracking**: Tracks page views, clicks, and form submissions
 - **Visitor Identification**: Unique visitor tracking with UUIDs
+- **Google Ads GCLID Attribution**: Remembers `gclid` (plus `gbraid`, `wbraid` and UTM tags) for 90 days, so every later page view, event and return visit is stored with the original ad click
 - **Query String & Cookie Capture**: Automatically captures URL parameters and cookies
 - **Custom Event Support**: Track custom events with flexible data payloads
 - **Admin Dashboard**: View and filter events with a clean, intuitive interface
@@ -95,6 +96,11 @@ You have two options:
 ### What's the difference between settings and custom tracking?
 Settings-based tracking automatically captures standard interactions. Custom tracking gives you control over what data to send with each event.
 
+### Is the GCLID kept after the visitor changes page or leaves?
+Yes. When a visitor lands with `?gclid=...`, the click ID is saved in a first-party cookie (`osiriswp_attribution`) for 90 days, matching Google Ads' click window. Every following event — on other pages, or when they come back days later — is stored with that GCLID in its own column. A newer ad click replaces it, and a visit with only UTM tags never erases it. This also works on page-cached sites, because the browser script captures it when PHP does not run.
+
+Use the **GCLID** and **Google Ads Clicks** filters on the Events screen, or the GCLID column in the CSV export (for example, for Google Ads offline conversion imports).
+
 ### Where is the event data stored?
 All events are stored in the `wp_osiriswp_events` table in your WordPress database.
 
@@ -110,6 +116,12 @@ By default, your event data is preserved. If you want to clean up the database o
 3. Event type breakdown chart
 
 == Changelog ==
+
+= 1.2.0 =
+* New: GCLID attribution — `gclid`/`gbraid`/`wbraid` and UTM tags are remembered for 90 days and every event is stored with the visitor's GCLID.
+* New: GCLID column, GCLID filter, "Only events with a GCLID" filter and a "Visitors with GCLID" summary card; GCLID column in CSV export.
+* Change: `page_view` is now recorded by the browser, so it works on page-cached sites (and visitors without JavaScript, mostly bots, are no longer counted).
+* Change: visitor ID is created in the browser when a cached page is served, and visitor/attribution cookies are renewed server-side so Safari keeps them for their full lifetime.
 
 = 1.1.0 =
 * Compatibility: tested up to WordPress 7.1; translations load on `init` (no WP 6.7+ notice); front-end script uses the `defer` loading strategy.

@@ -11,10 +11,26 @@ class OsirisWP_Events_Data {
 		$this->table_name = $wpdb->prefix . 'osiriswp_events';
 	}
 
-	public function get_events( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '', $page_num = 1, $per_page = 50 ) {
+	/**
+	 * Empty filter set (every key build_where() understands).
+	 */
+	public static function default_filters() {
+		return [
+			'visitor_uuid' => '',
+			'page'         => '',
+			'event_name'   => '',
+			'date_from'    => '',
+			'date_to'      => '',
+			'cookie_name'  => '',
+			'gclid'        => '',
+			'has_gclid'    => '',
+		];
+	}
+
+	public function get_events( array $filters, $page_num = 1, $per_page = 50 ) {
 		global $wpdb;
 
-		list( $where_clause, $args ) = $this->build_where( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+		list( $where_clause, $args ) = $this->build_where( $filters );
 
 		$page_num = max( 1, (int) $page_num );
 		$per_page = max( 1, (int) $per_page );
@@ -27,20 +43,25 @@ class OsirisWP_Events_Data {
 		return $wpdb->get_results( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
-	public function get_events_count( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
-		return $this->count( 'COUNT(*)', $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+	public function get_events_count( array $filters ) {
+		return $this->count( 'COUNT(*)', $filters );
+	}
+
+	public function get_unique_visitors_count( array $filters ) {
+		return $this->count( 'COUNT(DISTINCT visitor_uuid)', $filters );
 	}
 
 	/**
 	 * Fetch export rows in batches (keyset pagination on id) to keep memory flat.
 	 *
 	 * @param callable $callback Called with each batch (array of row objects).
+	 * @param array    $filters  Filters (see default_filters()).
 	 * @param int      $batch    Rows per batch.
 	 */
-	public function each_event_batch_for_export( callable $callback, $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '', $batch = 1000 ) {
+	public function each_event_batch_for_export( callable $callback, array $filters, $batch = 1000 ) {
 		global $wpdb;
 
-		list( $where_clause, $args ) = $this->build_where( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+		list( $where_clause, $args ) = $this->build_where( $filters );
 
 		$last_id = PHP_INT_MAX;
 		$prefix  = $where_clause ? $where_clause . ' AND' : 'WHERE';
@@ -48,7 +69,7 @@ class OsirisWP_Events_Data {
 		do {
 			$batch_args = array_merge( $args, [ $last_id, (int) $batch ] );
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$sql  = "SELECT id, visitor_uuid, event_name, page, query_strings, cookies, triggered_at FROM {$this->table_name} {$prefix} id < %d ORDER BY id DESC LIMIT %d";
+			$sql  = "SELECT id, visitor_uuid, event_name, page, gclid, query_strings, cookies, triggered_at FROM {$this->table_name} {$prefix} id < %d ORDER BY id DESC LIMIT %d";
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $batch_args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 			if ( empty( $rows ) ) {
@@ -64,10 +85,6 @@ class OsirisWP_Events_Data {
 		} while ( $count === (int) $batch );
 	}
 
-	public function get_unique_visitors_count( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
-		return $this->count( 'COUNT(DISTINCT visitor_uuid)', $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-	}
-
 	public function get_unique_pages() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -80,10 +97,10 @@ class OsirisWP_Events_Data {
 		return $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_name FROM {$this->table_name} ORDER BY event_name ASC LIMIT %d", self::DROPDOWN_LIMIT ) );
 	}
 
-	private function count( $expression, $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name ) {
+	private function count( $expression, array $filters ) {
 		global $wpdb;
 
-		list( $where_clause, $args ) = $this->build_where( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
+		list( $where_clause, $args ) = $this->build_where( $filters );
 
 		// $expression is a fixed internal string, never user input.
 		$sql = "SELECT {$expression} FROM {$this->table_name} {$where_clause}";
@@ -98,7 +115,7 @@ class OsirisWP_Events_Data {
 	/**
 	 * Read the dashboard filters from the current request.
 	 *
-	 * @return array{visitor_uuid:string,page:string,event_name:string,date_from:string,date_to:string,cookie_name:string}
+	 * @return array See default_filters().
 	 */
 	public static function get_filters_from_request() {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only filters.
@@ -114,6 +131,8 @@ class OsirisWP_Events_Data {
 			'date_from'    => self::sanitize_date( $get( 'date_from' ) ),
 			'date_to'      => self::sanitize_date( $get( 'date_to' ) ),
 			'cookie_name'  => $get( 'cookie_name' ),
+			'gclid'        => OsirisWP_Public::sanitize_click_id( $get( 'gclid' ) ),
+			'has_gclid'    => '1' === $get( 'has_gclid' ) ? '1' : '',
 		];
 		// phpcs:enable
 
@@ -134,43 +153,40 @@ class OsirisWP_Events_Data {
 	 *
 	 * @return array{0:string,1:array}
 	 */
-	private function build_where( $visitor_uuid = '', $page = '', $event_name = '', $date_from = '', $date_to = '', $cookie_name = '' ) {
+	private function build_where( array $filters ) {
 		global $wpdb;
 
+		$f     = array_merge( self::default_filters(), $filters );
 		$where = [];
 		$args  = [];
 
-		if ( '' !== (string) $visitor_uuid ) {
-			$where[] = 'visitor_uuid = %s';
-			$args[]  = $visitor_uuid;
+		foreach ( [ 'visitor_uuid' => 'visitor_uuid', 'page' => 'page', 'event_name' => 'event_name', 'gclid' => 'gclid' ] as $key => $column ) {
+			if ( '' !== (string) $f[ $key ] ) {
+				$where[] = "{$column} = %s";
+				$args[]  = $f[ $key ];
+			}
 		}
 
-		if ( '' !== (string) $page ) {
-			$where[] = 'page = %s';
-			$args[]  = $page;
-		}
-
-		if ( '' !== (string) $event_name ) {
-			$where[] = 'event_name = %s';
-			$args[]  = $event_name;
+		if ( '1' === (string) $f['has_gclid'] ) {
+			$where[] = "gclid <> ''";
 		}
 
 		// Range comparisons on the raw column so the triggered_at index can be used.
-		$date_from = self::sanitize_date( $date_from );
+		$date_from = self::sanitize_date( $f['date_from'] );
 		if ( '' !== $date_from ) {
 			$where[] = 'triggered_at >= %s';
 			$args[]  = $date_from . ' 00:00:00';
 		}
 
-		$date_to = self::sanitize_date( $date_to );
+		$date_to = self::sanitize_date( $f['date_to'] );
 		if ( '' !== $date_to ) {
 			$where[] = 'triggered_at <= %s';
 			$args[]  = $date_to . ' 23:59:59';
 		}
 
-		if ( '' !== (string) $cookie_name ) {
+		if ( '' !== (string) $f['cookie_name'] ) {
 			$where[] = 'cookies LIKE %s';
-			$args[]  = '%' . $wpdb->esc_like( $cookie_name ) . '%';
+			$args[]  = '%' . $wpdb->esc_like( $f['cookie_name'] ) . '%';
 		}
 
 		return [ $where ? 'WHERE ' . implode( ' AND ', $where ) : '', $args ];

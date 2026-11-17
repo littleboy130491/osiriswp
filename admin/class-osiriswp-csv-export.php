@@ -64,7 +64,7 @@ class OsirisWP_CSV_Export {
 		// Add BOM for Excel UTF-8 support
 		fwrite( $output, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 
-		fputcsv( $output, [ 'ID', 'Visitor UUID', 'Event Name', 'Page URL', 'Query Strings', 'Cookies', 'Triggered At' ], ',', '"', '\\' );
+		fputcsv( $output, [ 'ID', 'Visitor UUID', 'Event Name', 'Page URL', 'GCLID', 'Query Strings', 'Cookies', 'Triggered At' ], ',', '"', '\\' );
 
 		$this->data_handler->each_event_batch_for_export(
 			static function ( $rows ) use ( $output ) {
@@ -76,6 +76,7 @@ class OsirisWP_CSV_Export {
 							self::escape_cell( $event->visitor_uuid ),
 							self::escape_cell( $event->event_name ),
 							self::escape_cell( $event->page ),
+							self::escape_cell( $event->gclid ),
 							self::escape_cell( $event->query_strings ),
 							self::escape_cell( $event->cookies ),
 							$event->triggered_at,
@@ -87,12 +88,7 @@ class OsirisWP_CSV_Export {
 				}
 				flush();
 			},
-			$filters['visitor_uuid'],
-			$filters['page'],
-			$filters['event_name'],
-			$filters['date_from'],
-			$filters['date_to'],
-			$filters['cookie_name']
+			$filters
 		);
 
 		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose

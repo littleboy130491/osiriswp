@@ -2,7 +2,14 @@
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 class OsirisWP_Public {
-	const COOKIE_NAME = 'osiriswp_visitor_uuid';
+	const COOKIE_NAME        = 'osiriswp_visitor_uuid';
+	const ATTRIBUTION_COOKIE = 'osiriswp_attribution';
+
+	// Google Ads click window: keep the click ID for 90 days after the click.
+	const ATTRIBUTION_TTL = 90 * DAY_IN_SECONDS;
+
+	const CLICK_ID_KEYS = [ 'gclid', 'gbraid', 'wbraid' ];
+	const UTM_KEYS      = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content' ];
 
 	// Storage limits so a single anonymous request cannot bloat the table.
 	const MAX_PAGE_LENGTH    = 500;
@@ -17,7 +24,6 @@ class OsirisWP_Public {
 	public function hooks() {
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue' ] );
 		add_action( 'init', [ $this, 'set_visitor_uuid' ] );
-		add_action( 'wp', [ $this, 'track_page_view' ] );
 		add_action( 'wp_ajax_osiriswp_track_event', [ $this, 'ajax_track_event' ] );
 		add_action( 'wp_ajax_nopriv_osiriswp_track_event', [ $this, 'ajax_track_event' ] );
 	}
@@ -71,6 +77,164 @@ class OsirisWP_Public {
 		return substr( $name, 0, 100 );
 	}
 
+	/**
+	 * Google click IDs are URL-safe base64-like tokens.
+	 */
+	public static function sanitize_click_id( $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return '';
+		}
+		$value = preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $value );
+		return substr( $value, 0, 255 );
+	}
+
+	/**
+	 * Parse a raw query string into attribution parameters (click IDs + UTM tags).
+	 */
+	private function attribution_from_query( $query_string ) {
+		$params = [];
+		parse_str( (string) $query_string, $params );
+
+		$found = [];
+		foreach ( self::CLICK_ID_KEYS as $key ) {
+			if ( isset( $params[ $key ] ) ) {
+				$id = self::sanitize_click_id( $params[ $key ] );
+				if ( '' !== $id ) {
+					$found[ $key ] = $id;
+				}
+			}
+		}
+		foreach ( self::UTM_KEYS as $key ) {
+			if ( isset( $params[ $key ] ) && is_scalar( $params[ $key ] ) ) {
+				$val = $this->clean_string( sanitize_text_field( (string) $params[ $key ] ), 150 );
+				if ( '' !== $val ) {
+					$found[ $key ] = $val;
+				}
+			}
+		}
+
+		return $found;
+	}
+
+	/**
+	 * Read the stored attribution cookie (written by PHP or by public.js).
+	 */
+	public function get_attribution() {
+		if ( empty( $_COOKIE[ self::ATTRIBUTION_COOKIE ] ) || ! is_string( $_COOKIE[ self::ATTRIBUTION_COOKIE ] ) ) {
+			return [];
+		}
+
+		$data = json_decode( wp_unslash( $_COOKIE[ self::ATTRIBUTION_COOKIE ] ), true ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( ! is_array( $data ) ) {
+			return [];
+		}
+
+		$clean = [];
+		foreach ( self::CLICK_ID_KEYS as $key ) {
+			if ( isset( $data[ $key ] ) ) {
+				$id = self::sanitize_click_id( $data[ $key ] );
+				if ( '' !== $id ) {
+					$clean[ $key ] = $id;
+				}
+			}
+		}
+		foreach ( self::UTM_KEYS as $key ) {
+			if ( isset( $data[ $key ] ) && is_scalar( $data[ $key ] ) ) {
+				$clean[ $key ] = $this->clean_string( sanitize_text_field( (string) $data[ $key ] ), 150 );
+			}
+		}
+		$clean['ts'] = isset( $data['ts'] ) ? absint( $data['ts'] ) : time();
+
+		// Expired attribution is ignored even if the browser still sends it.
+		if ( $clean['ts'] + self::ATTRIBUTION_TTL < time() ) {
+			return [];
+		}
+
+		return $clean;
+	}
+
+	/**
+	 * Merge newly seen attribution with the stored one.
+	 * A new ad click always wins (last click); UTM-only visits never erase a stored click ID.
+	 */
+	private function merge_attribution( array $stored, array $incoming ) {
+		if ( empty( $incoming ) ) {
+			return $stored;
+		}
+
+		$incoming_has_click = (bool) array_intersect_key( $incoming, array_flip( self::CLICK_ID_KEYS ) );
+		$stored_has_click   = (bool) array_intersect_key( $stored, array_flip( self::CLICK_ID_KEYS ) );
+
+		if ( $stored_has_click && ! $incoming_has_click ) {
+			return $stored;
+		}
+
+		// Same click seen again (e.g. more events on the landing page): keep the original click time.
+		foreach ( self::CLICK_ID_KEYS as $key ) {
+			if ( isset( $incoming[ $key ], $stored[ $key ] ) && $incoming[ $key ] === $stored[ $key ] ) {
+				return $stored;
+			}
+		}
+
+		$incoming['ts'] = time();
+		return $incoming;
+	}
+
+	/**
+	 * Send the attribution cookie. Server-set cookies are not shortened by Safari ITP like JS cookies.
+	 */
+	private function write_attribution_cookie( array $attribution ) {
+		if ( empty( $attribution ) ) {
+			return;
+		}
+
+		$json    = wp_json_encode( $attribution );
+		$expires = ( isset( $attribution['ts'] ) ? (int) $attribution['ts'] : time() ) + self::ATTRIBUTION_TTL;
+
+		if ( ! headers_sent() && false !== $json && $expires > time() ) {
+			// Raw cookie + rawurlencode so public.js can decode it with decodeURIComponent.
+			setrawcookie(
+				self::ATTRIBUTION_COOKIE,
+				rawurlencode( $json ),
+				[
+					'expires'  => $expires,
+					'path'     => self::cookie_path(),
+					'domain'   => COOKIE_DOMAIN ? COOKIE_DOMAIN : '',
+					'secure'   => is_ssl(),
+					'httponly' => false,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+
+		$_COOKIE[ self::ATTRIBUTION_COOKIE ] = false === $json ? '' : $json;
+	}
+
+	/**
+	 * Capture click IDs / UTM tags from the current request URL into the attribution cookie.
+	 */
+	public function capture_attribution() {
+		$query = isset( $_SERVER['QUERY_STRING'] ) ? wp_unslash( $_SERVER['QUERY_STRING'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( '' === $query ) {
+			return;
+		}
+
+		$incoming = $this->attribution_from_query( $query );
+		if ( empty( $incoming ) ) {
+			return;
+		}
+
+		$stored = $this->get_attribution();
+		$merged = $this->merge_attribution( $stored, $incoming );
+		if ( $merged !== $stored ) {
+			$this->write_attribution_cookie( $merged );
+		}
+	}
+
+	public static function cookie_path() {
+		return COOKIEPATH ? COOKIEPATH : '/';
+	}
+
 	public function enqueue() {
 		wp_enqueue_script(
 			'osiriswp-public',
@@ -91,6 +255,13 @@ class OsirisWP_Public {
 				'ajax_url' => admin_url( 'admin-ajax.php' ),
 				'nonce'    => wp_create_nonce( 'osiriswp_track_event_nonce' ),
 			],
+			'cookie' => [
+				'path'            => self::cookie_path(),
+				'domain'          => COOKIE_DOMAIN ? COOKIE_DOMAIN : '',
+				'attribution_ttl' => self::ATTRIBUTION_TTL,
+			],
+			// page_view is sent by the browser so it also works on page-cached sites.
+			'track_page_view' => ! ( is_preview() || is_customize_preview() || is_embed() || is_feed() ),
 			'debug' => [
 				'debug_enabled' => (bool) get_option( 'osiriswp_debug', false ),
 			],
@@ -103,10 +274,14 @@ class OsirisWP_Public {
 
 		// Keep the legacy global names so existing integrations keep working.
 		$inline = sprintf(
-			'var osiriswp_ajax = %1$s; var osiriswp_debug = %2$s; var osiriswp_tracked_events = %3$s;',
+			'var osiriswp_ajax = %1$s; var osiriswp_debug = %2$s; var osiriswp_tracked_events = %3$s; var osiriswp_config = %4$s;',
 			wp_json_encode( $config['ajax'] ),
 			wp_json_encode( $config['debug'] ),
-			wp_json_encode( $config['tracked_events'] )
+			wp_json_encode( $config['tracked_events'] ),
+			wp_json_encode( [
+				'cookie'             => $config['cookie'],
+				'track_page_view'    => $config['track_page_view'],
+			] )
 		);
 		wp_add_inline_script( 'osiriswp-public', $inline, 'before' );
 	}
@@ -138,13 +313,19 @@ class OsirisWP_Public {
 		if ( null === $this->get_visitor_uuid() ) {
 			$this->issue_visitor_cookie();
 		}
+		// Landing requests (?gclid=…) persist the click ID before anything is tracked.
+		if ( ! wp_doing_ajax() ) {
+			$this->capture_attribution();
+		}
 	}
 
 	/**
 	 * Generate a new UUID, send it as a cookie and make it available for this request.
 	 */
-	private function issue_visitor_cookie() {
-		$visitor_uuid = wp_generate_uuid4();
+	private function issue_visitor_cookie( $visitor_uuid = null ) {
+		if ( null === $visitor_uuid ) {
+			$visitor_uuid = wp_generate_uuid4();
+		}
 
 		if ( ! headers_sent() ) {
 			setcookie(
@@ -152,7 +333,7 @@ class OsirisWP_Public {
 				$visitor_uuid,
 				[
 					'expires'  => time() + YEAR_IN_SECONDS,
-					'path'     => COOKIEPATH ? COOKIEPATH : '/',
+					'path'     => self::cookie_path(),
 					'domain'   => COOKIE_DOMAIN ? COOKIE_DOMAIN : '',
 					'secure'   => is_ssl(),
 					'httponly' => false, // Readable by front-end integrations (it is an identifier, not a credential).
@@ -317,6 +498,18 @@ class OsirisWP_Public {
 		}
 		$query_strings = $this->clean_string( ltrim( $query_strings, '?' ), self::MAX_QUERY_LENGTH );
 
+		// GCLID: from the current URL first (a fresh ad click), otherwise the remembered one.
+		$current_attribution = $this->attribution_from_query( $query_strings );
+		$attribution         = $this->merge_attribution( $this->get_attribution(), $current_attribution );
+		$gclid               = isset( $attribution['gclid'] ) ? $attribution['gclid'] : '';
+		if ( ! empty( $current_attribution['gclid'] ) ) {
+			$gclid = $current_attribution['gclid'];
+		}
+		if ( wp_doing_ajax() && ! empty( $current_attribution ) ) {
+			// Cached landing page: PHP never saw the URL, so persist it from the AJAX call.
+			$this->write_attribution_cookie( $attribution );
+		}
+
 		// Cookies from data (JavaScript) or from the request, minus sensitive ones.
 		if ( isset( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
 			$cookies_data = $this->prepare_cookies( $data['cookies'] );
@@ -330,11 +523,12 @@ class OsirisWP_Public {
 				'visitor_uuid'  => $visitor_uuid,
 				'event_name'    => $event_name,
 				'page'          => $page,
+				'gclid'         => $gclid,
 				'query_strings' => $query_strings,
 				'cookies'       => $cookies_data,
 				'triggered_at'  => current_time( 'mysql' ),
 			],
-			[ '%s', '%s', '%s', '%s', '%s', '%s' ]
+			[ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
 		);
 
 		if ( false === $result && $debug_enabled ) {
@@ -342,55 +536,6 @@ class OsirisWP_Public {
 		}
 
 		return false !== $result;
-	}
-
-	public function track_page_view() {
-		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
-			return;
-		}
-
-		// Only count real page loads (not HEAD/POST, previews, feeds, embeds…).
-		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
-		if ( 'GET' !== $method ) {
-			return;
-		}
-		if ( is_feed() || is_robots() || is_trackback() || is_embed() || is_preview() || is_customize_preview() || is_favicon() ) {
-			return;
-		}
-
-		if ( ! ( is_singular() || is_home() || is_front_page() || is_archive() || is_search() || is_404() ) ) {
-			return;
-		}
-
-		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
-
-		// Skip static assets that fell through to WordPress (usually 404s).
-		if ( preg_match( '/\.(css|js|map|jpe?g|png|gif|svg|webp|avif|ico|woff2?|ttf|eot|txt|xml)$/i', $path ) ) {
-			return;
-		}
-
-		$excluded_patterns = [
-			'/wp-admin/',
-			'/wp-includes/',
-			'/wp-content/',
-			'/xmlrpc.php',
-			'/wp-json/',
-			'/.well-known/',
-			'/sitemap',
-			'/wp-login.php',
-			'/wp-register.php',
-			'/wp-cron.php',
-			'/wp-mail.php',
-			'/wp-links-opml.php',
-		];
-		foreach ( $excluded_patterns as $pattern ) {
-			if ( false !== strpos( $path, $pattern ) ) {
-				return;
-			}
-		}
-
-		$this->track_event( 'page_view' );
 	}
 
 	public function ajax_track_event() {
@@ -431,6 +576,16 @@ class OsirisWP_Public {
 
 		if ( $debug_enabled ) {
 			error_log( 'OsirisWP AJAX: Tracking event - ' . $event_name ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
+
+		// Renew server-side cookies so browsers (Safari ITP) keep them for their full lifetime.
+		$existing_uuid = $this->get_visitor_uuid();
+		if ( $existing_uuid ) {
+			$this->issue_visitor_cookie( $existing_uuid );
+		}
+		$stored_attribution = $this->get_attribution();
+		if ( ! empty( $stored_attribution ) ) {
+			$this->write_attribution_cookie( $stored_attribution );
 		}
 
 		try {

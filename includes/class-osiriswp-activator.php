@@ -54,6 +54,7 @@ class OsirisWP_Activator {
 			visitor_uuid varchar(36) NOT NULL,
 			event_name varchar(255) NOT NULL,
 			page varchar(500) NOT NULL,
+			gclid varchar(255) NOT NULL DEFAULT '',
 			query_strings text,
 			cookies text,
 			triggered_at datetime DEFAULT CURRENT_TIMESTAMP,
@@ -62,6 +63,7 @@ class OsirisWP_Activator {
 			KEY visitor_uuid (visitor_uuid),
 			KEY event_name (event_name(191)),
 			KEY page (page(191)),
+			KEY gclid (gclid(191)),
 			KEY triggered_at (triggered_at)
 		) $charset_collate;";
 

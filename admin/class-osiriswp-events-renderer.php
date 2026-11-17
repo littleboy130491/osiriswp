@@ -13,40 +13,41 @@ class OsirisWP_Events_Renderer {
 	public function render() {
 		if ( ! current_user_can( 'manage_options' ) ) { return; }
 		
-		$filters      = OsirisWP_Events_Data::get_filters_from_request();
-		$visitor_uuid = $filters['visitor_uuid'];
-		$page         = $filters['page'];
-		$event_name   = $filters['event_name'];
-		$date_from    = $filters['date_from'];
-		$date_to      = $filters['date_to'];
-		$cookie_name  = $filters['cookie_name'];
+		$filters = OsirisWP_Events_Data::get_filters_from_request();
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$event_count_mode = isset( $_GET['event_count_mode'] ) && 'once' === $_GET['event_count_mode'] ? 'once' : 'each';
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$page_num = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
 		$per_page = self::PER_PAGE;
-		
-		$events = $this->data_handler->get_events( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $page_num, $per_page );
-		$total_events = $this->data_handler->get_events_count( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-		$total_visitors = $this->data_handler->get_unique_visitors_count( $visitor_uuid, $page, 'page_view', $date_from, $date_to, $cookie_name );
-		$event_unique_visitors = $this->data_handler->get_unique_visitors_count( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name );
-		$event_triggered = 'once' === $event_count_mode ? $event_unique_visitors : $total_events;
-		$event_rate = $total_visitors > 0 ? $event_triggered / $total_visitors : 0;
-		$total_pages = (int) ceil( $total_events / $per_page );
-		
-		$unique_pages = $this->data_handler->get_unique_pages();
+
+		$events                = $this->data_handler->get_events( $filters, $page_num, $per_page );
+		$total_events          = $this->data_handler->get_events_count( $filters );
+		$total_visitors        = $this->data_handler->get_unique_visitors_count( array_merge( $filters, [ 'event_name' => 'page_view' ] ) );
+		$event_unique_visitors = $this->data_handler->get_unique_visitors_count( $filters );
+		$gclid_visitors        = $this->data_handler->get_unique_visitors_count( array_merge( $filters, [ 'has_gclid' => '1' ] ) );
+		$event_triggered       = 'once' === $event_count_mode ? $event_unique_visitors : $total_events;
+		$event_rate            = $total_visitors > 0 ? $event_triggered / $total_visitors : 0;
+		$total_pages           = (int) ceil( $total_events / $per_page );
+
+		$unique_pages  = $this->data_handler->get_unique_pages();
 		$unique_events = $this->data_handler->get_unique_event_names();
-		
+
 		echo '<div class="wrap osiriswp-wrap">';
 		echo '<h1>' . esc_html__( 'Event Tracking Dashboard', 'osiriswp' ) . '</h1>';
-		$this->render_filters( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $event_count_mode, $unique_pages, $unique_events );
-		$this->render_summary( $total_visitors, $event_triggered, $event_rate, $event_count_mode );
-		$this->render_events_table( $events, $total_events, $total_pages, $page_num, $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $event_count_mode );
+		$this->render_filters( $filters, $event_count_mode, $unique_pages, $unique_events );
+		$this->render_summary( $total_visitors, $event_triggered, $event_rate, $event_count_mode, $gclid_visitors );
+		$this->render_events_table( $events, $total_events, $total_pages, $page_num, $filters, $event_count_mode );
 		echo '</div>';
 	}
 
-	private function render_filters( $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $event_count_mode, $unique_pages, $unique_events ) {
+	private function render_filters( $filters, $event_count_mode, $unique_pages, $unique_events ) {
+		$visitor_uuid = $filters['visitor_uuid'];
+		$page         = $filters['page'];
+		$event_name   = $filters['event_name'];
+		$date_from    = $filters['date_from'];
+		$date_to      = $filters['date_to'];
+		$cookie_name  = $filters['cookie_name'];
 		?>
 		<div class="osiriswp-filters">
 			<h2><?php echo esc_html__( 'Filter Events', 'osiriswp' ); ?></h2>
@@ -89,6 +90,19 @@ class OsirisWP_Events_Renderer {
 							<option value="once" <?php selected( $event_count_mode, 'once' ); ?>><?php echo esc_html__( 'Count once per visitor', 'osiriswp' ); ?></option>
 						</select>
 					</div>
+
+					<div class="filter-field">
+						<label for="gclid"><?php echo esc_html__( 'GCLID:', 'osiriswp' ); ?></label>
+						<input type="text" id="gclid" name="gclid" value="<?php echo esc_attr( $filters['gclid'] ); ?>" />
+					</div>
+
+					<div class="filter-field">
+						<label for="has_gclid"><?php echo esc_html__( 'Google Ads Clicks:', 'osiriswp' ); ?></label>
+						<select id="has_gclid" name="has_gclid">
+							<option value="" <?php selected( $filters['has_gclid'], '' ); ?>><?php echo esc_html__( 'All events', 'osiriswp' ); ?></option>
+							<option value="1" <?php selected( $filters['has_gclid'], '1' ); ?>><?php echo esc_html__( 'Only events with a GCLID', 'osiriswp' ); ?></option>
+						</select>
+					</div>
 				</div>
 
 				<div class="filter-row">
@@ -121,7 +135,7 @@ class OsirisWP_Events_Renderer {
 		<?php
 	}
 
-	private function render_summary( $total_visitors, $event_triggered, $event_rate, $event_count_mode ) {
+	private function render_summary( $total_visitors, $event_triggered, $event_rate, $event_count_mode, $gclid_visitors ) {
 		?>
 		<div class="osiriswp-summary">
 			<div class="osiriswp-summary-card">
@@ -144,11 +158,15 @@ class OsirisWP_Events_Renderer {
 				<h3><?php echo esc_html__( 'Rate (Events / Visitors)', 'osiriswp' ); ?></h3>
 				<p><?php echo esc_html( number_format_i18n( $event_rate, 2 ) ); ?></p>
 			</div>
+			<div class="osiriswp-summary-card">
+				<h3><?php echo esc_html__( 'Visitors with GCLID', 'osiriswp' ); ?></h3>
+				<p><?php echo esc_html( number_format_i18n( $gclid_visitors ) ); ?></p>
+			</div>
 		</div>
 		<?php
 	}
 
-	private function render_events_table( $events, $total_events, $total_pages, $page_num, $visitor_uuid, $page, $event_name, $date_from, $date_to, $cookie_name, $event_count_mode ) {
+	private function render_events_table( $events, $total_events, $total_pages, $page_num, $filters, $event_count_mode ) {
 		?>
 		<div class="osiriswp-events-table">
 			<h2><?php echo esc_html__( 'Recent Events', 'osiriswp' ); ?></h2>
@@ -175,6 +193,7 @@ class OsirisWP_Events_Renderer {
 						<th><?php echo esc_html__( 'Visitor UUID', 'osiriswp' ); ?></th>
 						<th><?php echo esc_html__( 'Event Name', 'osiriswp' ); ?></th>
 						<th><?php echo esc_html__( 'Page', 'osiriswp' ); ?></th>
+						<th><?php echo esc_html__( 'GCLID', 'osiriswp' ); ?></th>
 						<th><?php echo esc_html__( 'Query Strings', 'osiriswp' ); ?></th>
 						<th><?php echo esc_html__( 'Cookies', 'osiriswp' ); ?></th>
 						<th><?php echo esc_html__( 'Triggered At', 'osiriswp' ); ?></th>
@@ -188,6 +207,14 @@ class OsirisWP_Events_Renderer {
 								<td><code><a href="#" class="visitor-uuid-link" data-uuid="<?php echo esc_attr( $event->visitor_uuid ); ?>"><?php echo esc_html( $event->visitor_uuid ); ?></a></code></td>
 								<td><strong><?php echo esc_html( $event->event_name ); ?></strong></td>
 								<td><a href="<?php echo esc_url( $event->page ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( substr( $event->page, 0, 50 ) . ( strlen( $event->page ) > 50 ? '...' : '' ) ); ?></a></td>
+								<td>
+									<?php if ( ! empty( $event->gclid ) ) : ?>
+										<code class="osiriswp-gclid" title="<?php echo esc_attr( $event->gclid ); ?>"><?php echo esc_html( strlen( $event->gclid ) > 16 ? substr( $event->gclid, 0, 16 ) . '…' : $event->gclid ); ?></code>
+										<button type="button" class="button-link osiriswp-copy-inline copy-btn-inline" data-copy="<?php echo esc_attr( $event->gclid ); ?>"><?php echo esc_html__( 'Copy', 'osiriswp' ); ?></button>
+									<?php else : ?>
+										<em>&mdash;</em>
+									<?php endif; ?>
+								</td>
 								<td>
 									<?php 
 									if ( ! empty( $event->query_strings ) ) {
@@ -240,7 +267,7 @@ class OsirisWP_Events_Renderer {
 						<?php endforeach; ?>
 					<?php else: ?>
 						<tr>
-							<td colspan="7"><?php echo esc_html__( 'No events found.', 'osiriswp' ); ?></td>
+							<td colspan="8"><?php echo esc_html__( 'No events found.', 'osiriswp' ); ?></td>
 						</tr>
 					<?php endif; ?>
 				</tbody>
@@ -262,33 +289,16 @@ class OsirisWP_Events_Renderer {
 							?>
 						</span>
 						<?php
-						// Build URL with all current parameters
-						$url_params = [
-							'page' => 'osiriswp_events',
-						];
-						
-						if ( ! empty( $visitor_uuid ) ) {
-							$url_params['visitor_uuid'] = $visitor_uuid;
+						// Build URL with all current (non-empty) filters.
+						$url_params = [ 'page' => 'osiriswp_events' ];
+						$param_map  = [ 'visitor_uuid' => 'visitor_uuid', 'page' => 'page_url', 'event_name' => 'event_name', 'date_from' => 'date_from', 'date_to' => 'date_to', 'cookie_name' => 'cookie_name', 'gclid' => 'gclid', 'has_gclid' => 'has_gclid' ];
+						foreach ( $param_map as $key => $param ) {
+							if ( '' !== (string) $filters[ $key ] ) {
+								$url_params[ $param ] = $filters[ $key ];
+							}
 						}
-						if ( ! empty( $page ) ) {
-							$url_params['page_url'] = $page;
-						}
-						if ( ! empty( $event_name ) ) {
-							$url_params['event_name'] = $event_name;
-						}
-						if ( ! empty( $date_from ) ) {
-							$url_params['date_from'] = $date_from;
-						}
-						if ( ! empty( $date_to ) ) {
-							$url_params['date_to'] = $date_to;
-						}
-						if ( ! empty( $cookie_name ) ) {
-							$url_params['cookie_name'] = $cookie_name;
-						}
-						if ( ! empty( $event_count_mode ) ) {
-							$url_params['event_count_mode'] = $event_count_mode;
-						}
-						
+						$url_params['event_count_mode'] = $event_count_mode;
+
 						$base_url = add_query_arg( rawurlencode_deep( $url_params ), admin_url( 'admin.php' ) );
 						
 						echo paginate_links( [

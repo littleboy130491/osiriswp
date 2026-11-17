@@ -3,7 +3,7 @@
  * Plugin Name:       OsirisWP Event Tracking
  * Plugin URI:        https://imajiner.id
  * Description:       Track all events triggered in your WordPress site with visitor UUID management and comprehensive analytics dashboard.
- * Version:           1.1.0
+ * Version:           1.2.0
  * Requires at least: 6.3
  * Tested up to:      7.1
  * Requires PHP:      7.4
@@ -21,10 +21,10 @@ if (!defined('ABSPATH')) {
 
 // Plugin constants.
 if (!defined('OSIRISWP_VERSION')) {
-	define('OSIRISWP_VERSION', '1.1.0');
+	define('OSIRISWP_VERSION', '1.2.0');
 }
 if (!defined('OSIRISWP_DB_VERSION')) {
-	define('OSIRISWP_DB_VERSION', '1.1.0');
+	define('OSIRISWP_DB_VERSION', '1.2.0');
 }
 if (!defined('OSIRISWP_FILE')) {
 	define('OSIRISWP_FILE', __FILE__);
