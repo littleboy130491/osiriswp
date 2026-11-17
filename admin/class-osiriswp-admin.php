@@ -14,7 +14,7 @@ class OsirisWP_Admin {
 
 	public function hooks() {
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue' ] );
-		
+
 		// Hook all components
 		$this->menu->hooks();
 		$this->settings->hooks();
@@ -22,9 +22,23 @@ class OsirisWP_Admin {
 	}
 
 	public function enqueue( $hook ) {
-		if ( strpos( $hook, 'osiriswp' ) !== false ) {
-			wp_enqueue_style( 'osiriswp-admin', OSIRISWP_URL . 'assets/css/admin.css', [], OSIRISWP_VERSION );
-			wp_enqueue_script( 'osiriswp-admin', OSIRISWP_URL . 'assets/js/admin.js', [ 'jquery' ], OSIRISWP_VERSION, true );
+		if ( false === strpos( (string) $hook, 'osiriswp' ) ) {
+			return;
 		}
+
+		wp_enqueue_style( 'osiriswp-admin', OSIRISWP_URL . 'assets/css/admin.css', [], OSIRISWP_VERSION );
+		wp_enqueue_script( 'osiriswp-admin', OSIRISWP_URL . 'assets/js/admin.js', [ 'jquery' ], OSIRISWP_VERSION, [ 'in_footer' => true ] );
+
+		wp_localize_script( 'osiriswp-admin', 'osiriswpAdmin', [
+			'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+			'pruneNonce' => current_user_can( 'manage_options' ) ? wp_create_nonce( 'osiriswp_prune_nonce' ) : '',
+			'i18n'       => [
+				'copied'       => __( 'Copied!', 'osiriswp' ),
+				'confirmPrune' => __( 'Are you sure you want to delete old event data? This action cannot be undone.', 'osiriswp' ),
+				'pruning'      => __( 'Pruning...', 'osiriswp' ),
+				'pruneSuccess' => __( 'Data pruned successfully!', 'osiriswp' ),
+				'pruneError'   => __( 'Error pruning data:', 'osiriswp' ),
+			],
+		] );
 	}
 }

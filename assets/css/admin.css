@@ -1,1 +1,185 @@
-﻿/* OsirisWP admin styles */\n.osiriswp-note{color:#555;}
+/* OsirisWP admin styles */
+.osiriswp-filters {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	padding: 20px;
+	margin: 20px 0;
+}
+.filter-row {
+	display: flex;
+	gap: 20px;
+	margin-bottom: 15px;
+}
+.filter-field {
+	flex: 1;
+}
+.filter-field label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: bold;
+}
+.filter-field input,
+.filter-field select {
+	width: 100%;
+}
+.filter-actions {
+	margin-top: 15px;
+}
+.filter-actions .button {
+	margin-right: 10px;
+}
+.osiriswp-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 15px;
+	margin: 20px 0;
+}
+.osiriswp-summary-card {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	padding: 18px;
+	border-radius: 4px;
+}
+.osiriswp-summary-card h3 {
+	margin: 0 0 8px;
+	font-size: 14px;
+	color: #50575e;
+}
+.osiriswp-summary-card p {
+	margin: 0;
+	font-size: 24px;
+	line-height: 1.2;
+	font-weight: 600;
+}
+
+/* Pagination styling */
+.osiriswp-events-table .tablenav {
+	margin: 10px 0;
+}
+.osiriswp-events-table .tablenav-pages {
+	float: right;
+}
+.osiriswp-events-table .displaying-num {
+	margin-right: 10px;
+	color: #50575e;
+}
+.osiriswp-events-table .pagination-links {
+	margin: 0;
+}
+.osiriswp-events-table .pagination-links a,
+.osiriswp-events-table .pagination-links span {
+	display: inline-block;
+	min-width: 30px;
+	height: 30px;
+	line-height: 28px;
+	text-align: center;
+	border: 1px solid #ddd;
+	margin: 0 1px;
+	text-decoration: none;
+	color: #0073aa;
+}
+.osiriswp-events-table .pagination-links a:hover,
+.osiriswp-events-table .pagination-links a:focus {
+	background: #f3f3f3;
+	color: #0073aa;
+}
+.osiriswp-events-table .pagination-links .current {
+	background: #0073aa;
+	color: #fff;
+	border-color: #0073aa;
+}
+.osiriswp-events-table .pagination-links .prev,
+.osiriswp-events-table .pagination-links .next {
+	padding: 0 10px;
+}
+
+/* Table styling */
+.osiriswp-events-table .wp-list-table {
+	margin-top: 10px;
+}
+.osiriswp-events-table .column-id {
+	width: 60px;
+}
+.osiriswp-events-table .column-visitor_uuid {
+	width: 120px;
+}
+.osiriswp-events-table .column-event_name {
+	width: 120px;
+}
+.osiriswp-events-table .column-triggered_at {
+	width: 150px;
+}
+
+/* Visitor UUID link styling */
+.visitor-uuid-link {
+	color: #0073aa;
+	text-decoration: none;
+	cursor: pointer;
+}
+.visitor-uuid-link:hover {
+	color: #005a87;
+	text-decoration: underline;
+}
+
+/* Highlight effect for visitor UUID field */
+#visitor_uuid.highlight {
+	border-color: #0073aa;
+	box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.3);
+	transition: all 0.3s ease;
+}
+
+/* Collapsible data styling */
+.collapsible-data {
+	position: relative;
+}
+.data-summary {
+	color: #0073aa;
+	cursor: pointer;
+	font-size: 12px;
+	padding: 2px 4px;
+	border-radius: 3px;
+	display: inline-block;
+}
+.data-summary:hover {
+	background: #f0f6fc;
+	color: #005a87;
+}
+.data-content {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+	z-index: 1000;
+	min-width: 250px;
+	max-width: 400px;
+}
+.data-full {
+	padding: 10px;
+	max-height: 200px;
+	overflow-y: auto;
+	font-size: 11px;
+	line-height: 1.4;
+}
+.data-full div {
+	margin-bottom: 3px;
+	word-break: break-all;
+}
+.copy-btn {
+	background: #0073aa;
+	color: #fff;
+	border: none;
+	padding: 5px 10px;
+	font-size: 11px;
+	cursor: pointer;
+	width: 100%;
+	border-radius: 0 0 3px 3px;
+}
+.copy-btn:hover {
+	background: #005a87;
+}
+.copy-btn.copied {
+	background: #46b450;
+}

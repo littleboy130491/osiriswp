@@ -7,7 +7,8 @@ class OsirisWP
 {
 	public function run()
 	{
-		$this->load_textdomain();
+		// WP 6.7+ warns when translations load before `init`.
+		add_action('init', [$this, 'load_textdomain']);
 
 		// Admin area.
 		if (is_admin()) {
@@ -23,7 +24,7 @@ class OsirisWP
 		add_shortcode('osiriswp_hello', [$this, 'shortcode_hello']);
 	}
 
-	private function load_textdomain()
+	public function load_textdomain()
 	{
 		load_plugin_textdomain('osiriswp', false, dirname(plugin_basename(OSIRISWP_FILE)) . '/languages');
 	}
@@ -32,6 +33,7 @@ class OsirisWP
 	{
 		$atts = shortcode_atts(['name' => 'world'], $atts, 'osiriswp_hello');
 		$val = get_option('osiriswp_option_name', '');
+		/* translators: 1: name, 2: configured greeting. */
 		return sprintf(esc_html__('Hello %1$s! %2$s', 'osiriswp'), esc_html($atts['name']), esc_html($val));
 	}
 }
